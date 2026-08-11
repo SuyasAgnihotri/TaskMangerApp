@@ -1,5 +1,6 @@
 from django.urls import path
 
+
 from core.views import LoginView, LogoutView, MeView, RootView, SignupView
 from projects.views import (
     BoardDetailView,
@@ -42,4 +43,5 @@ urlpatterns = [
     path("api/tasks/<int:pk>/comments", TaskCommentListCreateView.as_view()),
     path("api/notifications", NotificationListView.as_view()),
     path("api/notifications/<int:pk>/read", NotificationMarkReadView.as_view()),
+    
 ]

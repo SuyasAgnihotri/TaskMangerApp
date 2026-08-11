@@ -1,4 +1,5 @@
 import os
+import dj_database_url
 from datetime import timedelta
 from pathlib import Path
 
@@ -73,14 +74,11 @@ if DATABASE_URL and DATABASE_URL.startswith("postgres"):
     )
     if match:
         DATABASES = {
-            "default": {
-                "ENGINE": "django.db.backends.postgresql",
-                "NAME": match.group("name"),
-                "USER": match.group("user"),
-                "PASSWORD": match.group("password"),
-                "HOST": match.group("host"),
-                "PORT": match.group("port"),
-            }
+            'default': dj_database_url.config(
+            default=DATABASE_URL,
+            conn_max_age=600,
+            ssl_require=True
+            )
         }
     else:
         DATABASES = {
