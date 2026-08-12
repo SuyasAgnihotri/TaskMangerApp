@@ -64,37 +64,13 @@ TEMPLATES = [
 WSGI_APPLICATION = "taskflow_backend.wsgi.application"
 ASGI_APPLICATION = "taskflow_backend.asgi.application"
 
-DATABASE_URL = env("DATABASE_URL")
-if DATABASE_URL and DATABASE_URL.startswith("postgres"):
-    import re
-
-    match = re.match(
-        r"postgres(?:ql)?://(?P<user>[^:]+):(?P<password>[^@]+)@(?P<host>[^:]+):(?P<port>\d+)/(?P<name>.+)",
-        DATABASE_URL,
+DATABASES = {
+    "default": dj_database_url.config(
+        default="sqlite:///" + str(BASE_DIR / "db.sqlite3"),
+        conn_max_age=600,
+        ssl_require=not DEBUG,
     )
-    if match:
-        DATABASES = {
-           'default': dj_database_url.config(
-                default=os.environ.get('DATABASE_URL'),
-                conn_max_age=600,
-                ssl_require=True,
-            )
-        }
-    else:
-        DATABASES = {
-            "default": {
-                "ENGINE": "django.db.backends.sqlite3",
-                "NAME": BASE_DIR / "db.sqlite3",
-            }
-        }
-else:
-    DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.sqlite3",
-            "NAME": BASE_DIR / "db.sqlite3",
-        }
-    }
-
+}
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
