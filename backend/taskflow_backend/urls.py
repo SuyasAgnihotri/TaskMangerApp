@@ -1,4 +1,5 @@
 from django.urls import path
+from django.contrib import admin
 
 
 from core.views import LoginView, LogoutView, MeView, RootView, SignupView
@@ -23,6 +24,7 @@ from workspaces.views import WorkspaceDetailView, WorkspaceInviteView, Workspace
 
 urlpatterns = [
     path("", RootView.as_view()),
+    path('admin/', admin.site.urls),
     path("api/auth/signup", SignupView.as_view()),
     path("api/auth/login", LoginView.as_view()),
     path("api/auth/logout", LogoutView.as_view()),
