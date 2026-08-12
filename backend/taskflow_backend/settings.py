@@ -119,7 +119,7 @@ JWT_ACCESS_COOKIE = "access_token"
 JWT_REFRESH_COOKIE = "refresh_token"
 JWT_COOKIE_SECURE = env("JWT_COOKIE_SECURE", "False") == "True"
 JWT_COOKIE_HTTPONLY = True
-JWT_COOKIE_SAMESITE = "Lax"
+JWT_COOKIE_SAMESITE = env("JWT_COOKIE_SAMESITE", "Lax")
 
 REDIS_URL = env("REDIS_URL", "redis://localhost:6379/0")
 
