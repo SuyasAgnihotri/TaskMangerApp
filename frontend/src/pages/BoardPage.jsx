@@ -3,6 +3,7 @@ import {
   DragOverlay,
   PointerSensor,
   closestCorners,
+  useDroppable,
   useSensor,
   useSensors,
 } from '@dnd-kit/core';
@@ -19,6 +20,8 @@ import api, { unwrap } from '../api/client';
 import Layout from '../components/Layout';
 import TaskCard from '../components/TaskCard';
 import TaskModal from '../components/TaskModal';
+
+const PRIORITY_OPTIONS = ['low', 'medium', 'high', 'urgent'];
 
 function SortableTask({ task, onClick }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
@@ -37,21 +40,36 @@ function SortableTask({ task, onClick }) {
   );
 }
 
-function BoardColumn({ column, onTaskClick }) {
-  const taskIds = column.tasks.map((t) => `task-${t.id}`);
+function BoardColumn({ column, visibleTasks, hiddenCount, onTaskClick }) {
+  const taskIds = visibleTasks.map((t) => `task-${t.id}`);
+
+  const { setNodeRef, isOver } = useDroppable({
+    id: `column-${column.id}`,
+    data: { type: 'column', columnId: column.id },
+  });
 
   return (
-    <div className="flex w-72 shrink-0 flex-col rounded-xl border border-slate-800 bg-slate-900/50">
+    <div
+      ref={setNodeRef}
+      className={`flex w-72 shrink-0 flex-col rounded-xl border bg-slate-900/50 transition-colors ${
+        isOver ? 'border-indigo-500' : 'border-slate-800'
+      }`}
+    >
       <div className="border-b border-slate-800 px-4 py-3">
         <h3 className="font-semibold">{column.name}</h3>
-        <span className="text-xs text-slate-500">{column.tasks.length} tasks</span>
+        <span className="text-xs text-slate-500">
+          {visibleTasks.length} tasks
+          {hiddenCount > 0 && <span className="text-slate-600"> · {hiddenCount} hidden</span>}
+        </span>
       </div>
       <SortableContext items={taskIds} strategy={verticalListSortingStrategy}>
         <div className="flex min-h-[200px] flex-1 flex-col gap-2 p-3">
-          {column.tasks.length === 0 ? (
-            <p className="py-8 text-center text-xs text-slate-600">No tasks yet</p>
+          {visibleTasks.length === 0 ? (
+            <p className="pointer-events-none py-8 text-center text-xs text-slate-600">
+              {hiddenCount > 0 ? 'No tasks match the filter' : 'No tasks yet'}
+            </p>
           ) : (
-            column.tasks.map((task) => (
+            visibleTasks.map((task) => (
               <SortableTask
                 key={task.id}
                 task={task}
@@ -71,6 +89,10 @@ export default function BoardPage() {
   const [selectedTaskId, setSelectedTaskId] = useState(null);
   const [activeTask, setActiveTask] = useState(null);
   const [localBoard, setLocalBoard] = useState(null);
+
+  const [filterPriority, setFilterPriority] = useState('');
+  const [filterAssignee, setFilterAssignee] = useState('');
+  const [filterLabel, setFilterLabel] = useState('');
 
   const { data: board, isLoading } = useQuery({
     queryKey: ['board', projectId],
@@ -105,10 +127,38 @@ export default function BoardPage() {
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
-  const columnsById = useMemo(() => {
-    if (!localBoard) return {};
-    return Object.fromEntries(localBoard.columns.map((c) => [c.id, c]));
+  const { assigneeOptions, labelOptions } = useMemo(() => {
+    if (!localBoard) return { assigneeOptions: [], labelOptions: [] };
+    const assigneesMap = new Map();
+    const labelsSet = new Set();
+
+    localBoard.columns.forEach((col) => {
+      col.tasks.forEach((task) => {
+        (task.assignees || []).forEach((a) => {
+          assigneesMap.set(a.user.id, a.user.first_name || a.user.email.split('@')[0]);
+        });
+        (task.labels || []).forEach((l) => labelsSet.add(l));
+      });
+    });
+
+    return {
+      assigneeOptions: Array.from(assigneesMap, ([id, name]) => ({ id, name })),
+      labelOptions: Array.from(labelsSet),
+    };
   }, [localBoard]);
+
+  const hasActiveFilters = filterPriority || filterAssignee || filterLabel;
+
+  const matchesFilter = useCallback(
+    (task) => {
+      if (filterPriority && task.priority !== filterPriority) return false;
+      if (filterAssignee && !(task.assignees || []).some((a) => String(a.user.id) === filterAssignee))
+        return false;
+      if (filterLabel && !(task.labels || []).includes(filterLabel)) return false;
+      return true;
+    },
+    [filterPriority, filterAssignee, filterLabel]
+  );
 
   const handleDragStart = (event) => {
     const task = event.active.data.current?.task;
@@ -126,6 +176,8 @@ export default function BoardPage() {
 
       if (over.data.current?.type === 'task') {
         targetColumnId = over.data.current.task.column_id;
+      } else if (over.data.current?.type === 'column') {
+        targetColumnId = over.data.current.columnId;
       } else if (String(over.id).startsWith('column-')) {
         targetColumnId = parseInt(String(over.id).replace('column-', ''), 10);
       }
@@ -180,6 +232,12 @@ export default function BoardPage() {
     if (title) createTask.mutate({ column_id: columnId, title });
   };
 
+  const clearFilters = () => {
+    setFilterPriority('');
+    setFilterAssignee('');
+    setFilterLabel('');
+  };
+
   return (
     <Layout>
       <div className="mb-4">
@@ -188,9 +246,63 @@ export default function BoardPage() {
         </Link>
       </div>
 
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-4 flex items-center justify-between">
         <h1 className="text-2xl font-bold">{localBoard?.name || 'Board'}</h1>
       </div>
+
+      {localBoard && (
+        <div className="mb-6 flex flex-wrap items-center gap-2">
+          <select
+            value={filterPriority}
+            onChange={(e) => setFilterPriority(e.target.value)}
+            className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-indigo-500"
+          >
+            <option value="">All priorities</option>
+            {PRIORITY_OPTIONS.map((p) => (
+              <option key={p} value={p}>
+                {p.charAt(0).toUpperCase() + p.slice(1)}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={filterAssignee}
+            onChange={(e) => setFilterAssignee(e.target.value)}
+            className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-indigo-500"
+          >
+            <option value="">All assignees</option>
+            {assigneeOptions.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name}
+              </option>
+            ))}
+          </select>
+
+          {labelOptions.length > 0 && (
+            <select
+              value={filterLabel}
+              onChange={(e) => setFilterLabel(e.target.value)}
+              className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-indigo-500"
+            >
+              <option value="">All labels</option>
+              {labelOptions.map((l) => (
+                <option key={l} value={l}>
+                  {l}
+                </option>
+              ))}
+            </select>
+          )}
+
+          {hasActiveFilters && (
+            <button
+              onClick={clearFilters}
+              className="rounded-lg px-3 py-1.5 text-xs text-slate-400 hover:text-indigo-400"
+            >
+              Clear filters
+            </button>
+          )}
+        </div>
+      )}
 
       {isLoading || !localBoard ? (
         <div className="flex gap-4 overflow-x-auto">
@@ -206,17 +318,26 @@ export default function BoardPage() {
           onDragEnd={handleDragEnd}
         >
           <div className="flex gap-4 overflow-x-auto pb-4">
-            {localBoard.columns.map((column) => (
-              <div key={column.id} id={`column-${column.id}`}>
-                <BoardColumn column={column} onTaskClick={setSelectedTaskId} />
-                <button
-                  onClick={() => handleAddTask(column.id)}
-                  className="mt-2 w-full rounded-lg border border-dashed border-slate-700 py-2 text-xs text-slate-400 hover:border-indigo-500 hover:text-indigo-400"
-                >
-                  + Add task
-                </button>
-              </div>
-            ))}
+            {localBoard.columns.map((column) => {
+              const visibleTasks = column.tasks.filter(matchesFilter);
+              const hiddenCount = column.tasks.length - visibleTasks.length;
+              return (
+                <div key={column.id}>
+                  <BoardColumn
+                    column={column}
+                    visibleTasks={visibleTasks}
+                    hiddenCount={hiddenCount}
+                    onTaskClick={setSelectedTaskId}
+                  />
+                  <button
+                    onClick={() => handleAddTask(column.id)}
+                    className="mt-2 w-full rounded-lg border border-dashed border-slate-700 py-2 text-xs text-slate-400 hover:border-indigo-500 hover:text-indigo-400"
+                  >
+                    + Add task
+                  </button>
+                </div>
+              );
+            })}
           </div>
           <DragOverlay>
             {activeTask ? <TaskCard task={activeTask} /> : null}
