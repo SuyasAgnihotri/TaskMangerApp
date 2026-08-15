@@ -106,3 +106,19 @@ class WorkspaceInviteView(APIView):
             data=WorkspaceMemberSerializer(membership).data,
             status=status.HTTP_201_CREATED,
         )
+
+
+
+class WorkspaceMembersView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk):
+        try:
+            workspace = Workspace.objects.get(
+                pk=pk, id__in=user_workspace_ids(request.user)
+            )
+        except Workspace.DoesNotExist:
+            return api_response(error={"detail": "Not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        members = WorkspaceMember.objects.filter(workspace=workspace).select_related("user")
+        return api_response(data=WorkspaceMemberSerializer(members, many=True).data)

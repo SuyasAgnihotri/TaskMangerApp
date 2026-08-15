@@ -13,6 +13,7 @@ export default function TaskModal({ taskId, onClose }) {
   const [priority, setPriority] = useState('medium');
   const [dueDate, setDueDate] = useState('');
   const [savedMsg, setSavedMsg] = useState(false);
+  const [addAssigneeId, setAddAssigneeId] = useState('');
 
   const { data: task, isLoading } = useQuery({
     queryKey: ['task', taskId],
@@ -24,6 +25,13 @@ export default function TaskModal({ taskId, onClose }) {
     queryKey: ['comments', taskId],
     queryFn: async () => unwrap(await api.get(`/tasks/${taskId}/comments`)),
     enabled: !!taskId,
+  });
+
+  const { data: members = [] } = useQuery({
+    queryKey: ['workspace-members', task?.workspace_id],
+    queryFn: async () =>
+      unwrap(await api.get(`/workspaces/${task.workspace_id}/members`)),
+    enabled: !!task?.workspace_id,
   });
 
   useEffect(() => {
@@ -45,6 +53,25 @@ export default function TaskModal({ taskId, onClose }) {
     },
   });
 
+  const addAssignee = useMutation({
+    mutationFn: async (userId) =>
+      unwrap(await api.post(`/tasks/${taskId}/assignees`, { user_id: userId })),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['task', taskId] });
+      queryClient.invalidateQueries({ queryKey: ['board'] });
+      setAddAssigneeId('');
+    },
+  });
+
+  const removeAssignee = useMutation({
+    mutationFn: async (userId) =>
+      api.delete(`/tasks/${taskId}/assignees`, { data: { user_id: userId } }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['task', taskId] });
+      queryClient.invalidateQueries({ queryKey: ['board'] });
+    },
+  });
+
   const addComment = useMutation({
     mutationFn: async (content) =>
       unwrap(await api.post(`/tasks/${taskId}/comments`, { content })),
@@ -59,6 +86,9 @@ export default function TaskModal({ taskId, onClose }) {
   const saveField = (fields) => {
     updateTask.mutate(fields);
   };
+
+  const assignedUserIds = new Set((task?.assignees || []).map((a) => a.user.id));
+  const availableMembers = members.filter((m) => !assignedUserIds.has(m.user.id));
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
@@ -130,6 +160,48 @@ export default function TaskModal({ taskId, onClose }) {
                   className="rounded bg-slate-800 px-2 py-1 text-xs text-slate-200 outline-none"
                 />
               </div>
+            </div>
+
+            <div className="mb-6">
+              <label className="mb-2 block text-[10px] uppercase text-slate-500">Assignees</label>
+              <div className="mb-2 flex flex-wrap gap-2">
+                {(task.assignees || []).length === 0 ? (
+                  <p className="text-sm text-slate-500">No one assigned yet.</p>
+                ) : (
+                  task.assignees.map((a) => (
+                    <span
+                      key={a.id}
+                      className="flex items-center gap-1.5 rounded-full bg-slate-800 py-1 pl-3 pr-1.5 text-xs text-slate-200"
+                    >
+                      {a.user.first_name || a.user.email.split('@')[0]}
+                      <button
+                        onClick={() => removeAssignee.mutate(a.user.id)}
+                        className="rounded-full p-0.5 text-slate-500 hover:bg-slate-700 hover:text-red-400"
+                        title="Remove assignee"
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  ))
+                )}
+              </div>
+              {availableMembers.length > 0 && (
+                <select
+                  value={addAssigneeId}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    if (id) addAssignee.mutate(id);
+                  }}
+                  className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-indigo-500"
+                >
+                  <option value="">+ Add assignee...</option>
+                  {availableMembers.map((m) => (
+                    <option key={m.user.id} value={m.user.id}>
+                      {m.user.first_name || m.user.email.split('@')[0]} ({m.user.email})
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
 
             <h3 className="mb-3 font-semibold">Comments</h3>

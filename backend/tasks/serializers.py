@@ -18,6 +18,8 @@ class TaskSerializer(serializers.ModelSerializer):
     column_id = serializers.PrimaryKeyRelatedField(
         source="column", queryset=Column.objects.all()
     )
+    workspace_id = serializers.SerializerMethodField()
+
 
     class Meta:
         model = Task
@@ -32,10 +34,14 @@ class TaskSerializer(serializers.ModelSerializer):
             "labels",
             "created_by",
             "assignees",
+            "workspace_id",
             "created_at",
             "updated_at",
         )
         read_only_fields = ("id", "created_by", "created_at", "updated_at")
+
+    def get_workspace_id(self, obj):
+        return obj.column.board.project.workspace_id
 
 
 class TaskBoardTaskSerializer(serializers.ModelSerializer):

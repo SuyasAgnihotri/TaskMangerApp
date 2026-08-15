@@ -20,7 +20,7 @@ from tasks.views import (
     TaskListCreateView,
     TaskSearchView,
 )
-from workspaces.views import WorkspaceDetailView, WorkspaceInviteView, WorkspaceListCreateView
+from workspaces.views import WorkspaceDetailView, WorkspaceInviteView, WorkspaceListCreateView,WorkspaceMembersView
 
 urlpatterns = [
     path("", RootView.as_view()),
@@ -29,6 +29,7 @@ urlpatterns = [
     path("api/auth/login", LoginView.as_view()),
     path("api/auth/logout", LogoutView.as_view()),
     path("api/auth/me", MeView.as_view()),
+    path("api/workspaces/<int:pk>/members", WorkspaceMembersView.as_view()),
     path("api/workspaces", WorkspaceListCreateView.as_view()),
     path("api/workspaces/<int:pk>", WorkspaceDetailView.as_view()),
     path("api/workspaces/<int:pk>/invite", WorkspaceInviteView.as_view()),
